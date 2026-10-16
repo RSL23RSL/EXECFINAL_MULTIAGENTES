@@ -1,0 +1,18 @@
+# Arquivos gerados ao rodar o exercício (o .env já é ignorado pelo .gitignore da raiz)
+saidas/*
+!saidas/.gitkeep
+# Segredos (chave de API, TOKEN_REGISTRO)
+.env
+
+# Ambiente virtual e cache do Python
+.venv/
+__pycache__/
+*.pyc
+
+# Arquivos temporários do Word/Office
+~$*
+~WRL*.tmp
+*.tmp
+
+# Saídas geradas ao rodar (registros, auditoria)
+saidas/
