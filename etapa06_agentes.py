@@ -130,10 +130,14 @@ def criar_redator() -> Agent:
         instructions=(
             "Você é o REDATOR de despachos de RH. Escreva UM despacho formal, curto, em português, usando SOMENTE "
             "os fatos recebidos (pedido, servidor, período, violações e parecer do coordenador). Não invente nada.\n"
+            "- Se receber uma DECISÃO, ela é FINAL (veio das regras em código): siga-a e não a contradiga, mesmo que "
+            "algum parecer sugira outra coisa. Só cite violações que estejam na lista de VIOLAÇÕES.\n"
             "- Sem violações: comece com 'Defiro' (ex.: 'Defiro o abono de 1 (um) dia útil em 09/04/2027 à servidora "
             "de matrícula 1001...').\n"
             "- Com violações: comece com 'Indefiro', cite a(s) regra(s) violada(s) (ex.: N5) e inclua a SUGESTÃO de "
             "novo período que veio no parecer.\n"
+            "- Termine SEMPRE com a frase 'Pedido deferido.' ou 'Pedido indeferido.' (a validação procura a palavra "
+            "'deferido' ou 'indeferido'; 'Defiro'/'Indefiro' sozinhos não bastam).\n"
             "- Inclua: matrícula, tipo do pedido, período (datas no formato DD/MM/AAAA), dias úteis, data de retorno "
             "quando houver, regras citadas e valores calculados (venda de férias, diárias) com a conta.\n"
             "- NUNCA escreva CPF, dado de saúde (regra N10) nem o salário-base do servidor.\n"
@@ -186,5 +190,7 @@ def criar_coordenador(hooks: RunHooks | None = None, tools_extras: list | None =
             "Nunca inclua CPF, dado de saúde nem o salário-base. Responda em português."
         ),
         tools=[*especialistas, *(tools_extras or [])],
-        model_settings=CONFIG,
+        # Um especialista por vez: em modelo LOCAL (Ollama), chamadas em paralelo ficam na fila do servidor e estouram
+        # o timeout HTTP. Em série, cada chamada só começa quando a anterior termina.
+        model_settings=ModelSettings(temperature=0, parallel_tool_calls=False),
     )

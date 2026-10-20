@@ -29,17 +29,21 @@ Runner e a tool NÃO roda. Trate LimiteExcedido em volta do Runner (etapa06_line
 """
 from agents import AgentsException, RunHooks
 
+TAMANHO_RESULTADO = 300  # ETAPA 10.1: o resultado de uma tool é truncado no registro (não guardamos tudo)
+
 
 class LimiteExcedido(AgentsException):
     """Levantada pelo hook quando um agente sai do que lhe é permitido."""
 
 
-# 🆕 B.1 -- agente -> conjunto de nomes de tools permitidas.
+# 🆕 B.1 -- agente -> conjunto de nomes de tools permitidas (PRIVILÉGIO MÍNIMO, Etapa 9.1).
 #   Os especialistas usam as tools de etapa06_agentes.py; o Coordenador só chama os especialistas (os tool_name das as_tool).
 #   O salário (consultar_remuneracao) só pode passar pelo Financeiro.
 PERMISSOES: dict[str, set[str]] = {
-    # "Normas": {"consultar_normas"},
-    # TODO 🆕 B.1: complete para Escala, Financeiro e Coordenador
+    "Normas": {"consultar_normas"},
+    "Escala": {"consultar_escala"},
+    "Financeiro": {"tabela_diarias", "consultar_remuneracao", "cotacao_dolar"},
+    "Coordenador": {"parecer_normas", "parecer_escala", "parecer_financeiro"},
 }
 
 
@@ -50,23 +54,55 @@ class Governanca(RunHooks):
         self.chamadas_llm = 0
         self.eventos: list[dict] = []  # ETAPA 10.1: o que aconteceu, para gravar em saidas/metricas.jsonl
 
+    def _log(self, texto: str) -> None:
+        if self.verbose:
+            print(f"[governança] {texto}")
+
     async def on_tool_start(self, context, agent, tool) -> None:
+        """🆕 B.2 -- roda ANTES da tool: levantar aqui impede a execução."""
         self.tools_chamadas += 1
-        # 🆕 B.2 (opcional) -- levante LimiteExcedido se:
-        #   - tool.name não está em PERMISSOES.get(agent.name, set())   -> "Coordenador não pode usar consultar_remuneracao"
-        #   - self.tools_chamadas > self.max_tools                       -> "orçamento de tools estourado (N de M)"
-        #   Imprima a decisão quando self.verbose (ex.: "[governança] Financeiro -> tabela_diarias: OK").
+        permitidas = PERMISSOES.get(agent.name, set())
+        if tool.name not in permitidas:
+            self._log(f"{agent.name} -> {tool.name}: BLOQUEADO (fora da lista de permissões)")
+            self.eventos.append({"evento": "bloqueio", "agente": agent.name, "tool": tool.name,
+                                 "motivo": "tool não permitida"})
+            raise LimiteExcedido(f"{agent.name} não pode usar {tool.name}")
+        if self.tools_chamadas > self.max_tools:
+            self._log(f"{agent.name} -> {tool.name}: BLOQUEADO (orçamento {self.tools_chamadas} de {self.max_tools})")
+            self.eventos.append({"evento": "bloqueio", "agente": agent.name, "tool": tool.name,
+                                 "motivo": "orçamento de tools"})
+            raise LimiteExcedido(f"orçamento de tools estourado ({self.tools_chamadas} de {self.max_tools})")
+        self._log(f"{agent.name} -> {tool.name}: OK ({self.tools_chamadas}/{self.max_tools})")
 
     async def on_llm_start(self, context, agent, system_prompt, input_items) -> None:
+        """🆕 B.3 -- roda ANTES de cada chamada ao modelo."""
         self.chamadas_llm += 1
-        # 🆕 B.3 (opcional) -- acima de self.max_llm, levante LimiteExcedido.
-        #   (Parece o max_turns da Etapa 4.7, mas a mensagem e o registro são SEUS, e vale para a equipe toda.)
+        if self.chamadas_llm > self.max_llm:
+            self.eventos.append({"evento": "bloqueio", "agente": agent.name, "motivo": "orçamento de LLM"})
+            raise LimiteExcedido(f"orçamento de chamadas ao modelo estourado ({self.chamadas_llm} de {self.max_llm})")
 
     async def on_tool_end(self, context, agent, tool, result) -> None:
-        # ETAPA 10.1 -- acrescente a self.eventos: {"agente", "tool", "argumentos", "resultado" (truncado)}.
-        #   Os argumentos estão em context.tool_arguments (texto JSON) quando a tool é uma function_tool.
-        pass
+        """ETAPA 10.1 -- registra a tool executada, os argumentos e o resultado (truncado)."""
+        resultado = str(result)
+        if len(resultado) > TAMANHO_RESULTADO:
+            resultado = resultado[:TAMANHO_RESULTADO] + "..."
+        self.eventos.append({
+            "evento": "tool",
+            "agente": agent.name,
+            "tool": tool.name,
+            "argumentos": getattr(context, "tool_arguments", None),  # texto JSON quando é uma function_tool
+            "resultado": resultado,
+        })
 
     async def on_agent_end(self, context, agent, output) -> None:
-        # ETAPA 10.1 -- acrescente a self.eventos os tokens até aqui: context.usage.total_tokens
-        pass
+        """ETAPA 10.1 -- registra os tokens consumidos até aqui."""
+        uso = getattr(context, "usage", None)
+        self.eventos.append({
+            "evento": "agente_fim",
+            "agente": agent.name,
+            "tokens": getattr(uso, "total_tokens", None),
+            "tokens_entrada": getattr(uso, "input_tokens", None),
+            "tokens_saida": getattr(uso, "output_tokens", None),
+            "chamadas_llm": self.chamadas_llm,
+            "tools_chamadas": self.tools_chamadas,
+        })

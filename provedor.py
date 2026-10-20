@@ -55,7 +55,7 @@ def configurar() -> str:
         modelo = os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini")
         os.environ["OPENAI_DEFAULT_MODEL"] = modelo  # é o modelo que todo Agent(...) usa quando não recebe `model`
         set_default_openai_client(_cliente(None, chave))
-        return f"openai:{modelo}"
+        return f"{modelo}"
 
     if provedor == "ollama":
         base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")

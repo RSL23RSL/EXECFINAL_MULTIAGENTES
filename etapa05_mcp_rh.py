@@ -118,15 +118,22 @@ def consultar_remuneracao(matricula: str) -> dict:
     return remuneracao(matricula)
 # ------------------------------------------------------------------ ETAPA 5.2 / 9.2 / 9.3: escrita
 def _auditar(protocolo: str, decisao_acesso: str, motivo: str, parametros: dict) -> None:
-    # ETAPA 9.3 -- acrescente UMA linha JSON em ARQUIVO_AUDITORIA com: quando (datetime.now().isoformat()),
-    #   thread_id, quem pediu (aprovador), tool ("registrar_decisao"), protocolo, decisao_acesso ("ALLOW"/"DENY"),
-    #   motivo e os parâmetros (SEM o token e SEM o despacho inteiro).
-    #   Referência: aula5/exemplos/10_seguranca/server_seguro.py (_registrar_auditoria), aqui em JSON Lines.
-    #   Até fazer a 9.3, este pass deixa a escrita funcionar sem auditoria.
-    pass
+    """ETAPA 9.3 -- uma linha JSON por tentativa de escrita (ALLOW ou DENY). SEM token e SEM despacho."""
+    linha = {
+        "quando": datetime.now().isoformat(timespec="seconds"),
+        "thread_id": parametros.get("thread_id", ""),
+        "quem": parametros.get("aprovador", ""),
+        "tool": "registrar_decisao",
+        "protocolo": protocolo,
+        "decisao_acesso": decisao_acesso,
+        "motivo": motivo,
+        "parametros": parametros,   # já vem sem o token e sem o despacho
+    }
+    ARQUIVO_AUDITORIA.parent.mkdir(parents=True, exist_ok=True)
+    with ARQUIVO_AUDITORIA.open("a", encoding="utf-8") as arquivo:
+        arquivo.write(json.dumps(linha, ensure_ascii=False) + "\n")
 
 
-@mcp.tool()
 @mcp.tool()
 def registrar_decisao(protocolo: str, matricula: str, tipo: str, inicio: str, fim: str, decisao: str,
                       aprovador: str, despacho: str, token: str, thread_id: str = "") -> dict:
@@ -152,7 +159,21 @@ def registrar_decisao(protocolo: str, matricula: str, tipo: str, inicio: str, fi
                   "aprovador": aprovador, "thread_id": thread_id}
 
     # ETAPA 9.2 -- (fica para depois) validações de token, enum e regra N8 entram AQUI, antes de gravar.
+    # ETAPA 9.2 -- autorização NO SERVER, antes de qualquer gravação (inclusive antes do "duplicado").
+    def negar(motivo: str) -> dict:
+        _auditar(protocolo, "DENY", motivo, parametros)
+        return {"sucesso": False, "erro": motivo}
 
+    if not TOKEN_REGISTRO or token != TOKEN_REGISTRO:
+        return negar("token de registro inválido ou ausente")
+    if decisao not in DECISOES_VALIDAS:
+        return negar(f"decisão inválida: {decisao!r} (válidas: {sorted(DECISOES_VALIDAS)})")
+    if aprovador.strip() == matricula.strip():
+        return negar("N8: ninguém aprova o próprio pedido")
+    if decisao == "deferido" and tipo in TIPOS_COM_CHEFIA:
+        chefia = (servidor_publico(matricula) or {}).get("chefia")
+        if aprovador != chefia:
+            return negar(f"N8: só a chefia imediata ({chefia}) pode aprovar {tipo} da matrícula {matricula}")
     # ETAPA 5.2 -- gravação idempotente
     registros = _ler_registros()
     if protocolo in registros:

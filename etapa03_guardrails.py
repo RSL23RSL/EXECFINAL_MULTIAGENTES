@@ -37,7 +37,7 @@ from dados.casos import CASOS
 from provedor import configurar
 
 MODELO = configurar()
-
+MODELO = "gpt-4o-mini" # override do .env para aula10 (Etapa 6)
 LIMIAR = 0.7  # nota a partir da qual o pedido é bloqueado (ajuste olhando as notas dos casos)
 
 # (PRONTO) As expressões regulares. O \b nas bordas evita casar pedaços de datas, valores e palavras.
@@ -92,6 +92,7 @@ INSTRUCOES_CLASSIFICADOR = (
 
 def criar_classificador() -> Agent:
     # ETAPA 3.2 -- agente classificador de escopo
+    MODELO = "gpt-4o-mini"
     return Agent(
         name="Classificador de escopo",
         instructions=INSTRUCOES_CLASSIFICADOR,

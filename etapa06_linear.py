@@ -36,7 +36,8 @@ from provedor import configurar
 from etapa06_regras import precisa_chefia, resumo_periodo, violacoes_objetivas
 
 MODELO = configurar()
-
+MODELO = "gpt-4o-mini"
+print(f"Usando o modelo: {MODELO}")
 # Limites de tempo (Etapa 4.7). Modelos LOCAIS (ex.: llama3.1 no Ollama) são lentos e o Coordenador chama especialistas
 # que chamam tools: 90 s não bastam. Com um modelo na nuvem, 90 s costumam sobrar.
 TIMEOUT_COORDENADOR = float(os.getenv("TIMEOUT_COORDENADOR", "900"))
@@ -115,6 +116,8 @@ def processar(texto: str, hooks: RunHooks | None = None) -> dict:
     pedido = extrair(texto).model_dump(mode="json")
     matricula, tipo = pedido.get("matricula"), pedido.get("tipo") or ""
     inicio, fim = pedido.get("data_inicio"), pedido.get("data_fim")
+    if tipo == "abono" and inicio and not fim:  # regra N6: abono é de 1 dia útil, então o fim é o próprio início
+        fim = pedido["data_fim"] = inicio
     print(f"[2/9] extração: {tipo} {matricula} {inicio}..{fim}")
     faltando = [nome for nome, valor in (("matricula", matricula), ("data_inicio", inicio), ("data_fim", fim))
                 if not valor]
@@ -170,7 +173,7 @@ def processar(texto: str, hooks: RunHooks | None = None) -> dict:
         "inicio": inicio,
         "fim": fim,
         "decisao": "indeferido" if violacoes else "deferido",
-        "aprovador": "pendente_chefia" if precisa_chefia(tipo) else "sistema",
+        "aprovador": "pendente_chefia" if precisa_chefia(pedido, violacoes) else "sistema",
         "despacho": despacho,
         "token": os.getenv("TOKEN_REGISTRO", ""),
     })
