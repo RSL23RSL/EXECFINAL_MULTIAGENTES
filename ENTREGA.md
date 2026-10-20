@@ -1,6 +1,6 @@
 # Entrega: Assistente de Gestão de Pessoas
 
-**Aluno(s):** (preencha com o seu nome)
+**Aluno: RENATO SILVA E LIRA
 **Até onde chegou:** ( ) Marco mínimo (Etapa 6)  ( ) Marco completo (Etapa 9)  (X) Etapas 10–11
 **Opcionais e bônus feitos:** ( ) 🆕 A  (X) 🆕 B  ( ) 🆕 C  ( ) Outro:
 
